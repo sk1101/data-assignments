@@ -58,3 +58,6 @@ values for audit.
 Tradeoff: triggers add write overhead to every source transaction and live
 inside the source database. Log-based CDC avoids both, which is why it is the
 production choice.
+- **Trigger column lists are fixed at install time.** A later source schema
+  change is not silently absorbed: the schema guard detects it and
+  stops ingestion before any record is read.
