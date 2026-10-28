@@ -91,9 +91,15 @@ def write_batch(lake_dir: Path, changes: list[ChangeRecord]) -> Path:
     return final_path
 
 
-def read_lake(lake_dir: Path) -> list[dict]:
-    """Every record in the lake, in lsn order."""
+def read_lake(lake_dir: Path, after_lsn: int = 0) -> list[dict]:
+    """Lake records with lsn > after_lsn, in lsn order.
+
+    Files whose whole range is at or below after_lsn are skipped by name, unopened.
+    """
     rows: list[dict] = []
     for path in lake_files(lake_dir):
-        rows.extend(pq.read_table(path).to_pylist())
+        last_lsn = int(_BATCH_FILE.match(path.name).group(2))
+        if last_lsn <= after_lsn:
+            continue
+        rows.extend(row for row in pq.read_table(path).to_pylist() if row["lsn"] > after_lsn)
     return sorted(rows, key=lambda row: row["lsn"])
