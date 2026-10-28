@@ -10,6 +10,7 @@ import sqlite3
 
 import pytest
 
+from pipeline.schema_guard import load_contract
 from source.db import connect, create_schema
 from tests.factories import EARLIER, LATER, customer, event, insert, ledger, seed, transfer, wallet
 
@@ -79,33 +80,20 @@ def test_r02_reference_to_missing_parent_is_rejected(db, table, row):
 
 # ── R03 required columns: every one ──────────────────────────────────────────
 
-REQUIRED_COLUMNS = {
-    "customers": ["full_name", "country_code", "kyc_status", "status", "created_at", "updated_at"],
-    "wallets": ["customer_id", "currency", "balance_minor", "status", "created_at", "updated_at"],
-    "transfers": [
-        "from_wallet_id",
-        "to_wallet_id",
-        "amount_minor",
-        "currency",
-        "status",
-        "created_at",
-        "updated_at",
-    ],
-    "ledger_entries": [
-        "transfer_id",
-        "entry_no",
-        "wallet_id",
-        "direction",
-        "amount_minor",
-        "created_at",
-    ],
-    "transfer_status_events": ["transfer_id", "seq", "to_status", "changed_at"],
-}
+CONTRACT = load_contract()
+
+
+def _is_rowid_alias(table, column):
+    """An INTEGER PRIMARY KEY is auto-assigned by SQLite when NULL, so it can't be null-tested."""
+    spec = CONTRACT["tables"][table]
+    return spec["primary_key"] == [column] and spec["columns"][column]["type"] == "INTEGER"
+
 
 NOT_NULL_CASES = [
     pytest.param(table, column, id=f"{table}.{column}")
-    for table, columns in REQUIRED_COLUMNS.items()
-    for column in columns
+    for table, spec in CONTRACT["tables"].items()
+    for column, definition in spec["columns"].items()
+    if not definition["nullable"] and not _is_rowid_alias(table, column)
 ]
 
 
@@ -120,16 +108,12 @@ def test_r03_required_column_cannot_be_null(db, table, column):
 # ── R04 allowed values and types ─────────────────────────────────────────────
 
 BAD_VALUES = [
-    pytest.param("customers", "kyc_status", "unknown", id="customers.kyc_status"),
-    pytest.param("customers", "status", "deleted", id="customers.status"),
+    pytest.param(table, column, "not_an_allowed_value", id=f"{table}.{column}")
+    for table, spec in CONTRACT["tables"].items()
+    for column in spec["enums"]
+] + [
+    # Not an allowed-values rule (a GLOB pattern), so listed explicitly.
     pytest.param("customers", "country_code", "UAE", id="customers.country_code"),
-    pytest.param("wallets", "currency", "EUR", id="wallets.currency"),
-    pytest.param("wallets", "status", "suspended", id="wallets.status"),
-    pytest.param("transfers", "currency", "EUR", id="transfers.currency"),
-    pytest.param("transfers", "status", "refunded", id="transfers.status"),
-    pytest.param("ledger_entries", "direction", "sideways", id="ledger_entries.direction"),
-    pytest.param("transfer_status_events", "from_status", "refunded", id="events.from_status"),
-    pytest.param("transfer_status_events", "to_status", "refunded", id="events.to_status"),
 ]
 
 
