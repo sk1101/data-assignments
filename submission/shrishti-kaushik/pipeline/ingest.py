@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pipeline import checkpoint
 from pipeline.capture import CDC_LOG, read_changes
-from pipeline.lake import write_batch
+from pipeline.lake import highest_lsn_in_lake, write_batch
 
 
 @dataclass(frozen=True)
@@ -30,22 +30,25 @@ def ingest_once(
     conn: sqlite3.Connection, paths: LakePaths, batch_size: int = 1000, prune: bool = False
 ) -> BatchResult | None:
     """Move one batch of changes into the lake. Returns None when there is nothing new."""
-    # BUG 2: trusts the checkpoint alone. If a crash happened after the lake
-    # write but before the checkpoint save, this re-reads changes already stored.
-    position = checkpoint.load_checkpoint(paths.checkpoint_file)
+    # The lake is the source of truth for progress; the checkpoint is a hint.
+    # Taking the max means a stale, lost or rewound checkpoint cannot cause duplicates.
+    position = max(
+        checkpoint.load_checkpoint(paths.checkpoint_file),
+        highest_lsn_in_lake(paths.lake_dir),
+    )
 
     changes = read_changes(conn, after_lsn=position, limit=batch_size)
     if not changes:
         return None
 
-    if prune:
-        # BUG 3: prunes the source log BEFORE the batch is safely in the lake.
-        # A crash during the write would lose these changes for good.
-        conn.execute(f"DELETE FROM {CDC_LOG} WHERE lsn <= ?", (changes[-1].lsn,))
-        conn.commit()
-
     write_batch(paths.lake_dir, changes)
     checkpoint.save_checkpoint(paths.checkpoint_file, changes[-1].lsn)
+
+    if prune:
+        # Only after the batch is durable in the lake AND the checkpoint is saved.
+        # A crash before this point leaves the source log untouched.
+        conn.execute(f"DELETE FROM {CDC_LOG} WHERE lsn <= ?", (changes[-1].lsn,))
+        conn.commit()
     return BatchResult(changes[0].lsn, changes[-1].lsn, len(changes))
 
 

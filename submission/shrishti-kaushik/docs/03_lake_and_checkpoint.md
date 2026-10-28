@@ -54,6 +54,7 @@ and typing happens in the warehouse. DuckDB can still query inside the JSON.
 | Duplicate change records | Changes with lsn ≤ resume position are never written; downstream readers also de-duplicate by lsn |
 | Restart after checkpointed progress | Continues from the checkpoint; no re-reading |
 | Source log pruning | Only rows ≤ the checkpoint are pruned, i.e. only rows already durable in the lake |
+| Same batch written twice | Same lsn range means the same file name; an existing file is never overwritten |
 
 Delivery is **at-least-once** (the checkpoint is saved after the data, so a crash
 can only cause a repeat, never a loss), and writes are **idempotent** (a repeat

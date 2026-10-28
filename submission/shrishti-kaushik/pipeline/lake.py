@@ -1,6 +1,7 @@
 """Lake writer: append-only Parquet files, one immutable file per batch (docs/03)."""
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -77,9 +78,16 @@ def write_batch(lake_dir: Path, changes: list[ChangeRecord]) -> Path:
         schema=LAKE_SCHEMA,
     )
     final_path = lake_dir / f"{bid}.parquet"
-    # BUG 1: writes straight to the final name. A crash mid-write leaves a
-    # half-written file that looks like a complete batch.
-    _write_parquet(table, final_path)
+    if final_path.exists():
+        # Same name means the same lsn range, i.e. the same changes, already stored.
+        # Never overwrite: lake files are immutable.
+        return final_path
+
+    # Write to a temp name first, then rename. The rename is atomic, so readers
+    # see either no file or the complete file, never a half-written one.
+    tmp_path = lake_dir / f"{bid}.parquet.tmp"
+    _write_parquet(table, tmp_path)
+    os.replace(tmp_path, final_path)
     return final_path
 
 
