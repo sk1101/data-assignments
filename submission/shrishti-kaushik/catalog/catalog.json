@@ -1,0 +1,692 @@
+{
+  "catalog_version": 1,
+  "source_contract_version": 1,
+  "datasets": [
+    {
+      "name": "lake.cdc_changes",
+      "layer": "lake",
+      "description": "Every change captured from the source, append-only (raw layer). One row per change in lsn order; before/after are JSON images of the row.",
+      "location": "data/lake/changes/*.parquet",
+      "format": "parquet",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "data engineers (replay, rebuild, debugging)",
+        "auditors"
+      ],
+      "update_cadence": "every ingestion cycle",
+      "retention": "forever; files are immutable",
+      "primary_key": [
+        "lsn"
+      ],
+      "how_to_query": "SELECT * FROM read_parquet('data/lake/changes/*.parquet') WHERE table_name = 'wallets' ORDER BY lsn",
+      "columns": [
+        {
+          "name": "lsn",
+          "type": "BIGINT"
+        },
+        {
+          "name": "table_name",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "op",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "pk",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "before",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "after",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "captured_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "batch_id",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ingested_at",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.curated.customers",
+      "layer": "warehouse-curated",
+      "description": "Current state. People using the wallet app: identity, KYC status and account status.",
+      "location": "data/warehouse.duckdb → curated.customers",
+      "format": "DuckDB view",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "analysts",
+        "finance",
+        "BI dashboards"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "current state only; history in warehouse.history.customers",
+      "primary_key": [
+        "customer_id"
+      ],
+      "how_to_query": "SELECT * FROM curated.customers",
+      "columns": [
+        {
+          "name": "country_code",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "customer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "full_name",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "kyc_status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "phone",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "updated_at",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.curated.ledger_entries",
+      "layer": "warehouse-curated",
+      "description": "Current state. Double-entry debit/credit lines posted when a transfer completes or reverses.",
+      "location": "data/warehouse.duckdb → curated.ledger_entries",
+      "format": "DuckDB view",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "analysts",
+        "finance",
+        "BI dashboards"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "current state only; history in warehouse.history.ledger_entries",
+      "primary_key": [
+        "transfer_id",
+        "entry_no"
+      ],
+      "how_to_query": "SELECT * FROM curated.ledger_entries",
+      "columns": [
+        {
+          "name": "amount_minor",
+          "type": "BIGINT"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "direction",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "entry_no",
+          "type": "BIGINT"
+        },
+        {
+          "name": "transfer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "wallet_id",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.curated.transfer_status_events",
+      "layer": "warehouse-curated",
+      "description": "Current state. Audit trail of every transfer status change.",
+      "location": "data/warehouse.duckdb → curated.transfer_status_events",
+      "format": "DuckDB view",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "analysts",
+        "finance",
+        "BI dashboards"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "current state only; history in warehouse.history.transfer_status_events",
+      "primary_key": [
+        "transfer_id",
+        "seq"
+      ],
+      "how_to_query": "SELECT * FROM curated.transfer_status_events",
+      "columns": [
+        {
+          "name": "changed_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "from_status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "seq",
+          "type": "BIGINT"
+        },
+        {
+          "name": "to_status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "transfer_id",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.curated.transfers",
+      "layer": "warehouse-curated",
+      "description": "Current state. Money movements between two wallets, with their lifecycle status.",
+      "location": "data/warehouse.duckdb → curated.transfers",
+      "format": "DuckDB view",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "analysts",
+        "finance",
+        "BI dashboards"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "current state only; history in warehouse.history.transfers",
+      "primary_key": [
+        "transfer_id"
+      ],
+      "how_to_query": "SELECT * FROM curated.transfers",
+      "columns": [
+        {
+          "name": "amount_minor",
+          "type": "BIGINT"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "currency",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "failure_reason",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "from_wallet_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "settled_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "to_wallet_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "transfer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "updated_at",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.curated.wallets",
+      "layer": "warehouse-curated",
+      "description": "Current state. One balance per customer per currency, in minor units (fils, cents, paise).",
+      "location": "data/warehouse.duckdb → curated.wallets",
+      "format": "DuckDB view",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "analysts",
+        "finance",
+        "BI dashboards"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "current state only; history in warehouse.history.wallets",
+      "primary_key": [
+        "wallet_id"
+      ],
+      "how_to_query": "SELECT * FROM curated.wallets",
+      "columns": [
+        {
+          "name": "balance_minor",
+          "type": "BIGINT"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "currency",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "customer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "updated_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "wallet_id",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.history.customers",
+      "layer": "warehouse-history",
+      "description": "Every version of every row (SCD Type 2). People using the wallet app: identity, KYC status and account status.",
+      "location": "data/warehouse.duckdb → history.customers",
+      "format": "DuckDB table",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "auditors",
+        "data engineers (restore, time travel)"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "forever",
+      "primary_key": [
+        "customer_id",
+        "_lsn"
+      ],
+      "how_to_query": "SELECT * FROM history.customers WHERE customer_id = ? ORDER BY _lsn",
+      "columns": [
+        {
+          "name": "country_code",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "customer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "full_name",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "kyc_status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "phone",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "updated_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_lsn",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_op",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_is_deleted",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "_valid_from",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to_lsn",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.history.ledger_entries",
+      "layer": "warehouse-history",
+      "description": "Every version of every row (SCD Type 2). Double-entry debit/credit lines posted when a transfer completes or reverses.",
+      "location": "data/warehouse.duckdb → history.ledger_entries",
+      "format": "DuckDB table",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "auditors",
+        "data engineers (restore, time travel)"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "forever",
+      "primary_key": [
+        "transfer_id",
+        "entry_no",
+        "_lsn"
+      ],
+      "how_to_query": "SELECT * FROM history.ledger_entries WHERE transfer_id = ? ORDER BY _lsn",
+      "columns": [
+        {
+          "name": "amount_minor",
+          "type": "BIGINT"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "direction",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "entry_no",
+          "type": "BIGINT"
+        },
+        {
+          "name": "transfer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "wallet_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_lsn",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_op",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_is_deleted",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "_valid_from",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to_lsn",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.history.transfer_status_events",
+      "layer": "warehouse-history",
+      "description": "Every version of every row (SCD Type 2). Audit trail of every transfer status change.",
+      "location": "data/warehouse.duckdb → history.transfer_status_events",
+      "format": "DuckDB table",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "auditors",
+        "data engineers (restore, time travel)"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "forever",
+      "primary_key": [
+        "transfer_id",
+        "seq",
+        "_lsn"
+      ],
+      "how_to_query": "SELECT * FROM history.transfer_status_events WHERE transfer_id = ? ORDER BY _lsn",
+      "columns": [
+        {
+          "name": "changed_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "from_status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "seq",
+          "type": "BIGINT"
+        },
+        {
+          "name": "to_status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "transfer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_lsn",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_op",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_is_deleted",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "_valid_from",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to_lsn",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.history.transfers",
+      "layer": "warehouse-history",
+      "description": "Every version of every row (SCD Type 2). Money movements between two wallets, with their lifecycle status.",
+      "location": "data/warehouse.duckdb → history.transfers",
+      "format": "DuckDB table",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "auditors",
+        "data engineers (restore, time travel)"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "forever",
+      "primary_key": [
+        "transfer_id",
+        "_lsn"
+      ],
+      "how_to_query": "SELECT * FROM history.transfers WHERE transfer_id = ? ORDER BY _lsn",
+      "columns": [
+        {
+          "name": "amount_minor",
+          "type": "BIGINT"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "currency",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "failure_reason",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "from_wallet_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "settled_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "to_wallet_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "transfer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "updated_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_lsn",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_op",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_is_deleted",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "_valid_from",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to_lsn",
+          "type": "BIGINT"
+        }
+      ]
+    },
+    {
+      "name": "warehouse.history.wallets",
+      "layer": "warehouse-history",
+      "description": "Every version of every row (SCD Type 2). One balance per customer per currency, in minor units (fils, cents, paise).",
+      "location": "data/warehouse.duckdb → history.wallets",
+      "format": "DuckDB table",
+      "owner": "data-platform",
+      "intended_consumers": [
+        "auditors",
+        "data engineers (restore, time travel)"
+      ],
+      "update_cadence": "near real time: every pipeline cycle",
+      "retention": "forever",
+      "primary_key": [
+        "wallet_id",
+        "_lsn"
+      ],
+      "how_to_query": "SELECT * FROM history.wallets WHERE wallet_id = ? ORDER BY _lsn",
+      "columns": [
+        {
+          "name": "balance_minor",
+          "type": "BIGINT"
+        },
+        {
+          "name": "created_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "currency",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "customer_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "updated_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "wallet_id",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_lsn",
+          "type": "BIGINT"
+        },
+        {
+          "name": "_op",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_is_deleted",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "_valid_from",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_valid_to_lsn",
+          "type": "BIGINT"
+        }
+      ]
+    }
+  ]
+}
