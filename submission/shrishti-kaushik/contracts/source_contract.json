@@ -1,0 +1,316 @@
+{
+  "generated_from": "source/schema.sql",
+  "tables": {
+    "customers": {
+      "columns": {
+        "country_code": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "customer_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "email": {
+          "nullable": true,
+          "type": "TEXT"
+        },
+        "full_name": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "kyc_status": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "phone": {
+          "nullable": true,
+          "type": "TEXT"
+        },
+        "status": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TEXT"
+        }
+      },
+      "ddl_sha256": "54511c10e007f93a0be232bca1fb3c2cc03f7a86abf58eb078a5cd6d77754124",
+      "enums": {
+        "kyc_status": [
+          "pending",
+          "rejected",
+          "verified"
+        ],
+        "status": [
+          "abandoned",
+          "active",
+          "closed"
+        ]
+      },
+      "foreign_keys": [],
+      "primary_key": [
+        "customer_id"
+      ]
+    },
+    "ledger_entries": {
+      "columns": {
+        "amount_minor": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "direction": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "entry_no": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "transfer_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "wallet_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        }
+      },
+      "ddl_sha256": "b408b87e419383c4c595cb9cda49182c83fd0ef86c47802fb080b818a195b349",
+      "enums": {
+        "direction": [
+          "credit",
+          "debit"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "transfer_id"
+          ],
+          "ref_columns": [
+            "transfer_id"
+          ],
+          "references": "transfers"
+        },
+        {
+          "columns": [
+            "wallet_id"
+          ],
+          "ref_columns": [
+            "wallet_id"
+          ],
+          "references": "wallets"
+        }
+      ],
+      "primary_key": [
+        "transfer_id",
+        "entry_no"
+      ]
+    },
+    "transfer_status_events": {
+      "columns": {
+        "changed_at": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "from_status": {
+          "nullable": true,
+          "type": "TEXT"
+        },
+        "seq": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "to_status": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "transfer_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        }
+      },
+      "ddl_sha256": "5fd152a9662908d2010e0a1e8dcf74868b7482a39870b0da83ee17d6b0805204",
+      "enums": {
+        "from_status": [
+          "completed",
+          "failed",
+          "pending",
+          "reversed"
+        ],
+        "to_status": [
+          "completed",
+          "failed",
+          "pending",
+          "reversed"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "transfer_id"
+          ],
+          "ref_columns": [
+            "transfer_id"
+          ],
+          "references": "transfers"
+        }
+      ],
+      "primary_key": [
+        "transfer_id",
+        "seq"
+      ]
+    },
+    "transfers": {
+      "columns": {
+        "amount_minor": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "currency": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "failure_reason": {
+          "nullable": true,
+          "type": "TEXT"
+        },
+        "from_wallet_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "settled_at": {
+          "nullable": true,
+          "type": "TEXT"
+        },
+        "status": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "to_wallet_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "transfer_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TEXT"
+        }
+      },
+      "ddl_sha256": "f1ff4db544d4ee947d64bcc5d1fd359c1a793520e41f112700a46975078482bc",
+      "enums": {
+        "currency": [
+          "AED",
+          "INR",
+          "USD"
+        ],
+        "status": [
+          "completed",
+          "failed",
+          "pending",
+          "reversed"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "from_wallet_id"
+          ],
+          "ref_columns": [
+            "wallet_id"
+          ],
+          "references": "wallets"
+        },
+        {
+          "columns": [
+            "to_wallet_id"
+          ],
+          "ref_columns": [
+            "wallet_id"
+          ],
+          "references": "wallets"
+        }
+      ],
+      "primary_key": [
+        "transfer_id"
+      ]
+    },
+    "wallets": {
+      "columns": {
+        "balance_minor": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "created_at": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "currency": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "customer_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        },
+        "status": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "updated_at": {
+          "nullable": false,
+          "type": "TEXT"
+        },
+        "wallet_id": {
+          "nullable": false,
+          "type": "INTEGER"
+        }
+      },
+      "ddl_sha256": "8d78c3b51514c523ba1f25f2a0ae3b9f8dccd7d23edd16ce55f4c2b0513288ee",
+      "enums": {
+        "currency": [
+          "AED",
+          "INR",
+          "USD"
+        ],
+        "status": [
+          "active",
+          "closed",
+          "frozen"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "customer_id"
+          ],
+          "ref_columns": [
+            "customer_id"
+          ],
+          "references": "customers"
+        }
+      ],
+      "primary_key": [
+        "wallet_id"
+      ]
+    }
+  },
+  "version": 1
+}

@@ -13,10 +13,15 @@ from pipeline.lake import highest_lsn_in_lake, write_batch
 class LakePaths:
     lake_dir: Path
     checkpoint_file: Path
+    alert_file: Path
 
     @classmethod
     def under(cls, root: Path) -> "LakePaths":
-        return cls(root / "lake" / "changes", root / "state" / "checkpoint.json")
+        return cls(
+            root / "lake" / "changes",
+            root / "state" / "checkpoint.json",
+            root / "state" / "schema_alert.json",
+        )
 
 
 @dataclass(frozen=True)
