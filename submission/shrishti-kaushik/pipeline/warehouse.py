@@ -98,24 +98,34 @@ def apply_changes(
     lake_dir: Path,
     up_to_lsn: int | None = None,
 ) -> int:
-    """Apply lake changes above the watermark (optionally only up to an lsn)."""
+    """Apply lake changes above the watermark (optionally only up to an lsn).
+
+    Duplicates are applied once, in lsn order, and the whole batch plus the
+    watermark commit in one transaction: a crash leaves the warehouse untouched.
+    """
     watermark = applied_lsn(conn)
     changes = read_lake(lake_dir, after_lsn=watermark)
     if up_to_lsn is not None:
         changes = [c for c in changes if c["lsn"] <= up_to_lsn]
 
-    # BUG A: no transaction. A crash part-way through leaves some changes applied
-    # while the watermark has not moved, so the next run applies them again.
-    # BUG B: no de-duplication. If the lake holds the same lsn twice (e.g. a batch
-    # re-copied during a backfill), that change is applied twice.
-    for change in changes:
-        _apply_change(conn, contract, change)
-    if changes:
+    # Each lsn is one change: keep a single copy (the lake is already in lsn order).
+    unique = list({change["lsn"]: change for change in changes}.values())
+    if not unique:
+        return 0
+
+    conn.begin()
+    try:
+        for change in unique:
+            _apply_change(conn, contract, change)
         conn.execute(
             "UPDATE meta.applied SET last_lsn = ?, updated_at = ?",
-            [changes[-1]["lsn"], utc_now()],
+            [unique[-1]["lsn"], utc_now()],
         )
-    return len(changes)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    return len(unique)
 
 
 # ── Reading, time travel and restore ─────────────────────────────────────────
