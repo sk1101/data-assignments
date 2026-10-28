@@ -100,9 +100,12 @@ class Violation:
 
     def describe(self) -> str:
         where = f"{self.table}.{self.column}" if self.column else self.table
-        if self.expected is None and self.actual is None:
-            return f"{self.kind}: {where}"
-        return f"{self.kind}: {where} (expected {self.expected!r}, found {self.actual!r})"
+        details = []
+        if self.expected is not None:
+            details.append(f"expected {self.expected!r}")
+        if self.actual is not None:
+            details.append(f"found {self.actual!r}")
+        return f"{self.kind}: {where}" + (f" ({', '.join(details)})" if details else "")
 
 
 class SchemaContractViolation(RuntimeError):
