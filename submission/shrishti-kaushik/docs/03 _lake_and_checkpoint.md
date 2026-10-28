@@ -73,5 +73,5 @@ is detected and skipped). Together these give effectively exactly-once results.
 - Many small batches create many small files. Production would compact them.
 - The lake keeps personal data of deleted customers forever, which conflicts with
   right-to-erasure rules. Production would mask or encrypt personal fields so
-  they can be destroyed (crypto-shredding).
+  they can be destroyed.
 - A single pipeline process is assumed. Two concurrent writers would need a lock.
