@@ -100,10 +100,146 @@ def system_checks(contract: dict) -> list[Check]:
 
 # ── Business rules R05-R17 ───────────────────────────────────────────────────
 
+# Allowed transfer status transitions (R12), as (from, to); None = newly created.
+ALLOWED_TRANSITIONS = [
+    (None, "pending"),
+    ("pending", "completed"),
+    ("pending", "failed"),
+    ("completed", "reversed"),
+]
+
+
+def _allowed_transition(from_col: str, to_col: str) -> str:
+    """SQL that is true when (from_col → to_col) is an allowed transition."""
+    terms = []
+    for before, after in ALLOWED_TRANSITIONS:
+        left = f"{from_col} IS NULL" if before is None else f"{from_col} = '{before}'"
+        terms.append(f"({left} AND {to_col} = '{after}')")
+    return " OR ".join(terms)
+
 
 def business_checks() -> list[Check]:
-    # GAP (first version): business rules are not checked in the warehouse yet.
-    return []
+    return [
+        Check(
+            "R05",
+            "a customer has at most one wallet per currency",
+            "SELECT customer_id, currency, COUNT(*) AS wallets FROM curated.wallets "
+            "GROUP BY customer_id, currency HAVING COUNT(*) > 1",
+        ),
+        Check(
+            "R06",
+            "wallet balance is not negative",
+            "SELECT wallet_id, balance_minor FROM curated.wallets WHERE balance_minor < 0",
+        ),
+        Check(
+            "R07",
+            "transfer amount is positive",
+            "SELECT transfer_id, amount_minor FROM curated.transfers WHERE amount_minor <= 0",
+        ),
+        Check(
+            "R07",
+            "ledger amount is positive",
+            "SELECT transfer_id, entry_no, amount_minor FROM curated.ledger_entries "
+            "WHERE amount_minor <= 0",
+        ),
+        Check(
+            "R08",
+            "a transfer moves money between two different wallets",
+            "SELECT transfer_id, from_wallet_id, to_wallet_id FROM curated.transfers "
+            "WHERE from_wallet_id = to_wallet_id",
+        ),
+        Check(
+            "R09",
+            "settlement is not before creation",
+            "SELECT transfer_id, created_at, settled_at FROM curated.transfers "
+            "WHERE settled_at < created_at",
+        ),
+        Check(
+            "R10",
+            "failure reason is present exactly when failed",
+            "SELECT transfer_id, status, failure_reason FROM curated.transfers "
+            "WHERE (status = 'failed') <> (failure_reason IS NOT NULL)",
+        ),
+        Check(
+            "R11",
+            "settlement time is present exactly when completed or reversed",
+            "SELECT transfer_id, status, settled_at FROM curated.transfers "
+            "WHERE (status IN ('completed', 'reversed')) <> (settled_at IS NOT NULL)",
+        ),
+        Check(
+            "R12",
+            "every transfer status change in history is an allowed transition",
+            "SELECT transfer_id, previous AS from_status, status AS to_status, _lsn FROM ("
+            "  SELECT transfer_id, status, _lsn, "
+            "  LAG(status) OVER (PARTITION BY transfer_id ORDER BY _lsn) AS previous "
+            "  FROM history.transfers"
+            ") WHERE previous IS NOT NULL AND previous <> status "
+            f"AND NOT ({_allowed_transition('previous', 'status')})",
+        ),
+        Check(
+            "R12",
+            "every status event records an allowed transition",
+            "SELECT transfer_id, seq, from_status, to_status "
+            "FROM curated.transfer_status_events "
+            f"WHERE NOT ({_allowed_transition('from_status', 'to_status')})",
+        ),
+        Check(
+            "R13",
+            "ledger entries and status events are never updated or deleted",
+            "SELECT 'ledger_entries' AS history_table, _lsn, _op FROM history.ledger_entries "
+            "WHERE _op <> 'I' "
+            "UNION ALL "
+            "SELECT 'transfer_status_events', _lsn, _op FROM history.transfer_status_events "
+            "WHERE _op <> 'I'",
+        ),
+        Check(
+            "R14",
+            "transfer currency matches both wallets",
+            "SELECT t.transfer_id, t.currency, f.currency AS from_currency, "
+            "w.currency AS to_currency FROM curated.transfers t "
+            "JOIN curated.wallets f ON f.wallet_id = t.from_wallet_id "
+            "JOIN curated.wallets w ON w.wallet_id = t.to_wallet_id "
+            "WHERE t.currency <> f.currency OR t.currency <> w.currency",
+        ),
+        Check(
+            "R15",
+            "every transfer's ledger is balanced",
+            "SELECT * FROM ("
+            "  SELECT t.transfer_id, t.status, t.amount_minor, "
+            "  COALESCE(SUM(l.amount_minor) FILTER (WHERE l.direction = 'debit'), 0) AS debits, "
+            "  COALESCE(SUM(l.amount_minor) FILTER (WHERE l.direction = 'credit'), 0) AS credits "
+            "  FROM curated.transfers t "
+            "  LEFT JOIN curated.ledger_entries l ON l.transfer_id = t.transfer_id "
+            "  GROUP BY t.transfer_id, t.status, t.amount_minor"
+            ") WHERE debits <> credits "
+            "OR (status = 'completed' AND debits <> amount_minor) "
+            "OR (status = 'reversed' AND debits <> 2 * amount_minor) "
+            "OR (status IN ('pending', 'failed') AND debits <> 0)",
+        ),
+        Check(
+            "R16",
+            "only abandoned customers were ever deleted",
+            "SELECT customer_id, status, _lsn FROM history.customers "
+            "WHERE _is_deleted AND status <> 'abandoned'",
+        ),
+        Check(
+            "R17",
+            "every customer has an email or a phone",
+            "SELECT customer_id FROM curated.customers WHERE email IS NULL AND phone IS NULL",
+        ),
+        Check(
+            "R17",
+            "email is unique",
+            "SELECT email, COUNT(*) AS customers FROM curated.customers "
+            "WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1",
+        ),
+        Check(
+            "R17",
+            "phone is unique",
+            "SELECT phone, COUNT(*) AS customers FROM curated.customers "
+            "WHERE phone IS NOT NULL GROUP BY phone HAVING COUNT(*) > 1",
+        ),
+    ]
 
 
 def all_checks(contract: dict) -> list[Check]:

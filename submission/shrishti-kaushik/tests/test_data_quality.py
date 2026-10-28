@@ -14,6 +14,7 @@ from pipeline.schema_guard import load_contract
 from pipeline.warehouse import apply_changes, connect_warehouse, create_warehouse
 from quality.checks import all_checks, format_report, run_checks, write_report
 from source.db import connect, create_schema
+from source.sample_activity import run_sample_activity
 from tests.factories import seed
 
 SOURCE_DOC = Path(__file__).resolve().parent.parent / "docs" / "01_source_schema.md"
@@ -182,3 +183,17 @@ def test_failures_report_the_offending_rows(env, contract, tmp_path):
     write_report(results, report_path)
     saved = json.loads(report_path.read_text())
     assert any(r["rule"] == "R06" and not r["passed"] for r in saved["results"])
+
+
+def test_sample_activity_passes_every_check(tmp_path, contract):
+    src = connect()
+    create_schema(src)
+    install_cdc(src)
+    run_sample_activity(src)
+    paths = LakePaths.under(tmp_path)
+    ingest_all(src, paths, contract=contract)
+    wh = connect_warehouse()
+    create_warehouse(wh, contract)
+    apply_changes(wh, contract, paths.lake_dir)
+    results = run_checks(wh, contract, paths.lake_dir)
+    assert failing_rules(results) == set(), format_report(results)
