@@ -114,23 +114,63 @@ class SchemaContractViolation(RuntimeError):
         super().__init__(f"source schema does not match the contract:\n{lines}")
 
 
+def _compare_table(table: str, expected: dict, actual: dict) -> list[Violation]:
+    found: list[Violation] = []
+    exp_cols, act_cols = expected["columns"], actual["columns"]
+
+    for column in sorted(exp_cols.keys() - act_cols.keys()):
+        found.append(Violation("missing_column", table, column, exp_cols[column], None))
+    for column in sorted(act_cols.keys() - exp_cols.keys()):
+        found.append(Violation("unexpected_column", table, column, None, act_cols[column]))
+    for column in sorted(exp_cols.keys() & act_cols.keys()):
+        exp, act = exp_cols[column], act_cols[column]
+        if exp["type"] != act["type"]:
+            found.append(Violation("type_changed", table, column, exp["type"], act["type"]))
+        if exp["nullable"] != act["nullable"]:
+            found.append(
+                Violation("nullability_changed", table, column, exp["nullable"], act["nullable"])
+            )
+
+    for column in sorted(expected["enums"].keys() | actual["enums"].keys()):
+        exp, act = expected["enums"].get(column), actual["enums"].get(column)
+        if exp != act:
+            found.append(Violation("enum_changed", table, column, exp, act))
+
+    if expected["primary_key"] != actual["primary_key"]:
+        found.append(
+            Violation(
+                "primary_key_changed", table, None, expected["primary_key"], actual["primary_key"]
+            )
+        )
+    if expected["foreign_keys"] != actual["foreign_keys"]:
+        found.append(
+            Violation(
+                "foreign_key_changed", table, None, expected["foreign_keys"], actual["foreign_keys"]
+            )
+        )
+
+    # Safety net: the definition changed in a way none of the checks above explain.
+    if not found and expected["ddl_sha256"] != actual["ddl_sha256"]:
+        found.append(
+            Violation(
+                "ddl_changed", table, None, expected["ddl_sha256"][:12], actual["ddl_sha256"][:12]
+            )
+        )
+    return found
+
+
 def check_contract(conn: sqlite3.Connection, contract: dict) -> list[Violation]:
     """Every difference between the live schema and the contract (empty list = match)."""
     live = describe_source(conn)
+    expected = contract["tables"]
     violations: list[Violation] = []
 
-    # GAP (first version, like the sample): compares column NAMES only.
-    # Misses type, nullability, allowed values, keys, other rules and new tables.
-    for table, expected in contract["tables"].items():
-        if table not in live:
-            violations.append(Violation("missing_table", table))
-            continue
-        expected_cols = set(expected["columns"])
-        live_cols = set(live[table]["columns"])
-        for column in sorted(expected_cols - live_cols):
-            violations.append(Violation("missing_column", table, column))
-        for column in sorted(live_cols - expected_cols):
-            violations.append(Violation("unexpected_column", table, column))
+    for table in sorted(expected.keys() - live.keys()):
+        violations.append(Violation("missing_table", table))
+    for table in sorted(live.keys() - expected.keys()):
+        violations.append(Violation("unexpected_table", table))
+    for table in sorted(expected.keys() & live.keys()):
+        violations.extend(_compare_table(table, expected[table], live[table]))
 
     return violations
 

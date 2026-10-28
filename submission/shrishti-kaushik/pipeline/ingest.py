@@ -7,6 +7,7 @@ from pathlib import Path
 from pipeline import checkpoint
 from pipeline.capture import CDC_LOG, read_changes
 from pipeline.lake import highest_lsn_in_lake, write_batch
+from pipeline.schema_guard import enforce_contract, load_contract
 
 
 @dataclass(frozen=True)
@@ -32,9 +33,20 @@ class BatchResult:
 
 
 def ingest_once(
-    conn: sqlite3.Connection, paths: LakePaths, batch_size: int = 1000, prune: bool = False
+    conn: sqlite3.Connection,
+    paths: LakePaths,
+    batch_size: int = 1000,
+    prune: bool = False,
+    contract: dict | None = None,
 ) -> BatchResult | None:
-    """Move one batch of changes into the lake. Returns None when there is nothing new."""
+    """Move one batch of changes into the lake. Returns None when there is nothing new.
+
+    Raises SchemaContractViolation, before reading anything, if the source schema
+    no longer matches the contract.
+    """
+    # Stop the line first: never read changes under a schema we don't recognise.
+    enforce_contract(conn, contract or load_contract(), paths.alert_file)
+
     # The lake is the source of truth for progress; the checkpoint is a hint.
     # Taking the max means a stale, lost or rewound checkpoint cannot cause duplicates.
     position = max(
@@ -58,7 +70,11 @@ def ingest_once(
 
 
 def ingest_all(
-    conn: sqlite3.Connection, paths: LakePaths, batch_size: int = 1000, prune: bool = False
+    conn: sqlite3.Connection,
+    paths: LakePaths,
+    batch_size: int = 1000,
+    prune: bool = False,
+    contract: dict | None = None,
 ) -> list[BatchResult]:
     """Run ingestion cycles until the source has nothing new."""
     results = []
